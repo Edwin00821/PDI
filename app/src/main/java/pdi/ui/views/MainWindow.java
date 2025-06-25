@@ -10,7 +10,7 @@ import java.util.Objects;
 import pdi.lib.core.application.ImageLoaderService;
 import pdi.lib.core.application.LoadImageResult;
 import pdi.lib.core.domain.Image;
-
+import pdi.ui.components.DialogManager;
 import pdi.ui.components.ImageCanvas;
 
 /**
@@ -28,6 +28,7 @@ public class MainWindow extends JFrame {
 
   // UI Components
   private ImageCanvas imageCanvas;
+  private DialogManager dialogManager;
   private JMenuBar menuBar;
   private JLabel statusLabel;
 
@@ -75,6 +76,7 @@ public class MainWindow extends JFrame {
   private void createComponents() {
     // Create main image canvas
     imageCanvas = new ImageCanvas();
+    dialogManager = new DialogManager(this);
 
     // Create status bar
     statusLabel = new JLabel("Ready");
@@ -190,7 +192,7 @@ public class MainWindow extends JFrame {
     // About
     JMenuItem aboutItem = new JMenuItem("About");
     aboutItem.setMnemonic('A');
-    aboutItem.addActionListener(e -> showAboutDialog());
+    aboutItem.addActionListener(e -> dialogManager.showAboutDialog());
     helpMenu.add(aboutItem);
 
     return helpMenu;
@@ -225,29 +227,6 @@ public class MainWindow extends JFrame {
    */
   private void updateStatus(String message) {
     statusLabel.setText(message);
-  }
-
-  /**
-   * Shows an error dialog with the specified message.
-   * 
-   * @param title   Dialog title
-   * @param message Error message
-   */
-  private void showErrorDialog(String title, String message) {
-    JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE);
-  }
-
-  /**
-   * Shows the about dialog.
-   */
-  private void showAboutDialog() {
-    String aboutText = "PDI - Digital Image Processing\n\n" +
-        "A simple application for digital image processing\n" +
-        "Built with Clean Architecture principles\n\n" +
-        "Version: 1.0.0 MVP";
-
-    JOptionPane.showMessageDialog(this, aboutText, "About PDI",
-        JOptionPane.INFORMATION_MESSAGE);
   }
 
   /**
@@ -298,12 +277,12 @@ public class MainWindow extends JFrame {
         setTitle("PDI - " + loadedImage.getOriginalFileName());
 
       } else {
-        showErrorDialog("Error Loading Image", result.getErrorMessage());
+        dialogManager.showErrorDialog("Error Loading Image", result.getErrorMessage());
         updateStatus("Failed to load image: " + file.getName());
       }
 
     } catch (Exception ex) {
-      showErrorDialog("Unexpected Error",
+      dialogManager.showErrorDialog("Unexpected Error",
           "An unexpected error occurred while loading the image: " + ex.getMessage());
       updateStatus("Error occurred while loading image");
     }
