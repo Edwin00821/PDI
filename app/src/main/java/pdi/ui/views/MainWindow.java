@@ -5,15 +5,14 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.File;
 import java.util.Objects;
 
 import pdi.lib.core.application.ImageLoaderService;
-import pdi.lib.core.application.LoadImageResult;
 import pdi.lib.core.domain.Image;
 import pdi.ui.components.DialogManager;
 import pdi.ui.components.ImageCanvas;
 import pdi.ui.components.MenuManager;
+import pdi.ui.handlers.FileOperationHandler;
 
 /**
  * Main application window for the PDI (Digital Image Processing) application.
@@ -37,8 +36,8 @@ public class MainWindow extends JFrame {
   // Application services
   private final ImageLoaderService imageLoaderService;
 
-  // File chooser for image selection (reusable)
-  private JFileChooser fileChooser;
+  // Handlers
+  private FileOperationHandler fileOperationHandler;
 
   /**
    * Creates the main application window.
@@ -52,6 +51,7 @@ public class MainWindow extends JFrame {
     initializeWindow();
     createComponents();
     setupLayout();
+    setupHandlers();
     setupMenuCallbacks();
     setupEventHandlers();
   }
@@ -73,7 +73,20 @@ public class MainWindow extends JFrame {
   }
 
   /**
-   * Creates and initializes UI components.
+   * Sets up the main layout of the window.
+   */
+  private void setupLayout() {
+    setLayout(new BorderLayout());
+
+    // Add canvas to center (main area)
+    add(imageCanvas, BorderLayout.CENTER);
+
+    // Add status bar to bottom
+    add(statusLabel, BorderLayout.SOUTH);
+  }
+
+  /**
+   * Creates and initializes handlers.
    */
   private void createComponents() {
     // Create main image canvas
@@ -87,61 +100,32 @@ public class MainWindow extends JFrame {
     // Create status bar
     statusLabel = new JLabel("Ready");
     statusLabel.setBorder(BorderFactory.createLoweredBevelBorder());
+  }
 
-    // Initialize file chooser with image filters
-    setupFileChooser();
+  /**
+   * Creates and initializes UI components.
+   */
+  private void setupHandlers() {
+    // Initialize file operation handler
+    fileOperationHandler = new FileOperationHandler(imageLoaderService, this);
+
+    fileOperationHandler.setStatusUpdateCallback(this::updateStatus);
+    fileOperationHandler.setImageLoadedCallback(this::handleImageLoaded);
+    fileOperationHandler.setErrorCallback(this::handleError);
+    fileOperationHandler.setImageClosedCallback(this::handleImageClosed);
+
   }
 
   /**
    * Sets up callbacks for menu actions.
    */
   private void setupMenuCallbacks() {
-    menuManager.setOnOpenImage(this::openImage);
-    menuManager.setOnCloseImage(this::closeCurrentImage);
-    menuManager.setOnExit(this::exitApplication);
+    menuManager.setOnOpenImage(fileOperationHandler::openImage);
+    menuManager.setOnCloseImage(fileOperationHandler::closeCurrentImage);
+
     menuManager.setOnAbout(dialogManager::showAboutDialog);
+    menuManager.setOnExit(this::exitApplication);
 
-  }
-
-  /**
-   * Sets up the file chooser with appropriate filters for image files.
-   */
-  private void setupFileChooser() {
-    fileChooser = new JFileChooser();
-    fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
-
-    // Add file filter for supported image formats
-    fileChooser.setFileFilter(new javax.swing.filechooser.FileFilter() {
-      @Override
-      public boolean accept(File file) {
-        if (file.isDirectory()) {
-          return true;
-        }
-
-        String fileName = file.getName().toLowerCase();
-        return fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") ||
-            fileName.endsWith(".png") || fileName.endsWith(".gif") ||
-            fileName.endsWith(".bmp") || fileName.endsWith(".wbmp");
-      }
-
-      @Override
-      public String getDescription() {
-        return "Image Files (*.jpg, *.png, *.gif, *.bmp)";
-      }
-    });
-  }
-
-  /**
-   * Sets up the main layout of the window.
-   */
-  private void setupLayout() {
-    setLayout(new BorderLayout());
-
-    // Add canvas to center (main area)
-    add(imageCanvas, BorderLayout.CENTER);
-
-    // Add status bar to bottom
-    add(statusLabel, BorderLayout.SOUTH);
   }
 
   /**
@@ -174,16 +158,18 @@ public class MainWindow extends JFrame {
     });
   }
 
-  /**
-   * Handles the open image action.
-   */
-  private void openImage() {
-    int result = fileChooser.showOpenDialog(this);
+  private void handleImageLoaded(Image image) {
+    imageCanvas.setImage(image);
+    setTitle("PDI - " + image.getOriginalFileName());
+  }
 
-    if (result == JFileChooser.APPROVE_OPTION) {
-      File selectedFile = fileChooser.getSelectedFile();
-      loadImage(selectedFile);
-    }
+  private void handleError(String errorMessage) {
+    dialogManager.showErrorDialog("Error", errorMessage);
+  }
+
+  private void handleImageClosed() {
+    imageCanvas.clearImage();
+    setTitle("PDI - Digital Image Processing");
   }
 
   /**
@@ -209,51 +195,6 @@ public class MainWindow extends JFrame {
    */
   private void updateStatus(String message) {
     statusLabel.setText(message);
-  }
-
-  /**
-   * Loads an image from the specified file.
-   * 
-   * @param file File containing the image to load
-   */
-  private void loadImage(File file) {
-    updateStatus("Loading image: " + file.getName() + "...");
-
-    try {
-      // Use the service to load the image
-      LoadImageResult result = imageLoaderService.loadImage(file);
-
-      if (result.isSuccess()) {
-        Image loadedImage = result.getImage();
-        imageCanvas.setImage(loadedImage);
-
-        updateStatus("Image loaded: " + loadedImage.getOriginalFileName() +
-            " (" + loadedImage.getWidth() + "x" + loadedImage.getHeight() + ")");
-
-        // Update window title to include filename
-        setTitle("PDI - " + loadedImage.getOriginalFileName());
-
-      } else {
-        dialogManager.showErrorDialog("Error Loading Image", result.getErrorMessage());
-        updateStatus("Failed to load image: " + file.getName());
-      }
-
-    } catch (Exception ex) {
-      dialogManager.showErrorDialog("Unexpected Error",
-          "An unexpected error occurred while loading the image: " + ex.getMessage());
-      updateStatus("Error occurred while loading image");
-    }
-  }
-
-  /**
-   * Closes the currently displayed image.
-   */
-  private void closeCurrentImage() {
-    if (imageCanvas.hasImage()) {
-      imageCanvas.clearImage();
-      setTitle("PDI - Digital Image Processing");
-      updateStatus("Image closed");
-    }
   }
 
   /**
