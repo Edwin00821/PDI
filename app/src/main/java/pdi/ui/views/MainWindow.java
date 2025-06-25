@@ -7,11 +7,13 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.Objects;
 
+import pdi.lib.color.application.ColorProcessorService;
 import pdi.lib.core.application.ImageLoaderService;
 import pdi.lib.core.domain.Image;
 import pdi.ui.components.DialogManager;
 import pdi.ui.components.ImageCanvas;
 import pdi.ui.components.MenuManager;
+import pdi.ui.controllers.ColorOperationsController;
 import pdi.ui.handlers.FileOperationHandler;
 
 /**
@@ -35,18 +37,25 @@ public class MainWindow extends JFrame {
 
   // Application services
   private final ImageLoaderService imageLoaderService;
+  private final ColorProcessorService colorProcessorService;
 
   // Handlers
   private FileOperationHandler fileOperationHandler;
+
+  // Controllers
+  private ColorOperationsController colorOperationsController;
 
   /**
    * Creates the main application window.
    * 
    * @param imageLoaderService Service for loading and managing images
    */
-  public MainWindow(ImageLoaderService imageLoaderService) {
+  public MainWindow(ImageLoaderService imageLoaderService, ColorProcessorService colorProcessorService) {
     this.imageLoaderService = Objects.requireNonNull(imageLoaderService,
         "ImageLoaderService cannot be null");
+
+    this.colorProcessorService = Objects.requireNonNull(colorProcessorService,
+        "ColorProcessorService cannot be null");
 
     initializeWindow();
     createComponents();
@@ -114,6 +123,13 @@ public class MainWindow extends JFrame {
     fileOperationHandler.setErrorCallback(this::handleError);
     fileOperationHandler.setImageClosedCallback(this::handleImageClosed);
 
+    // Initialize color operations controller
+    colorOperationsController = new ColorOperationsController(dialogManager, colorProcessorService);
+
+    colorOperationsController.setImageUpdateCallback(this::handleColorProcessedImage);
+    colorOperationsController.setStatusUpdateCallback(this::updateStatus);
+    colorOperationsController.setTitleUpdateCallback(this::setTitle);
+
   }
 
   /**
@@ -125,6 +141,13 @@ public class MainWindow extends JFrame {
 
     menuManager.setOnAbout(dialogManager::showAboutDialog);
     menuManager.setOnExit(this::exitApplication);
+
+    menuManager.setOnGrayscale(() -> applyColorOperation("grayscale"));
+    menuManager.setOnBrightness(() -> applyColorOperation("brightness"));
+    menuManager.setOnContrast(() -> applyColorOperation("contrast"));
+    menuManager.setOnRedChannel(() -> applyColorOperation("rgb_red"));
+    menuManager.setOnGreenChannel(() -> applyColorOperation("rgb_green"));
+    menuManager.setOnBlueChannel(() -> applyColorOperation("rgb_blue"));
 
   }
 
@@ -158,18 +181,52 @@ public class MainWindow extends JFrame {
     });
   }
 
+  private void handleError(String errorMessage) {
+    dialogManager.showErrorDialog("Error", errorMessage);
+  }
+
   private void handleImageLoaded(Image image) {
     imageCanvas.setImage(image);
     setTitle("PDI - " + image.getOriginalFileName());
-  }
 
-  private void handleError(String errorMessage) {
-    dialogManager.showErrorDialog("Error", errorMessage);
+    menuManager.setImageLoaded(true);
   }
 
   private void handleImageClosed() {
     imageCanvas.clearImage();
     setTitle("PDI - Digital Image Processing");
+
+    menuManager.setImageLoaded(false);
+  }
+
+  /**
+   * Handles color-processed image updates.
+   * 
+   * @param processedImage The processed image to display
+   */
+  private void handleColorProcessedImage(Image processedImage) {
+    imageCanvas.setImage(processedImage);
+  }
+
+  /**
+   * Applies a color operation to the currently loaded image.
+   * 
+   * @param operationType Type of operation to apply
+   */
+  private void applyColorOperation(String operationType) {
+    Image currentImage = getCurrentImage();
+    if (currentImage != null) {
+      colorOperationsController.applyColorOperation(currentImage, operationType);
+    }
+  }
+
+  /**
+   * Gets the currently loaded image from the canvas.
+   * 
+   * @return Current image or null if none loaded
+   */
+  private Image getCurrentImage() {
+    return imageCanvas.getCurrentImage();
   }
 
   /**

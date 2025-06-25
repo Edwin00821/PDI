@@ -4,6 +4,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
+import pdi.lib.color.application.ColorProcessorService;
 import pdi.lib.core.application.ImageLoaderService;
 import pdi.lib.core.infrastructure.FileImageLoader;
 import pdi.lib.core.infrastructure.InMemoryImageRepository;
@@ -91,11 +92,12 @@ public class App {
     // Create application layer services
     // These coordinate between UI and domain, implementing use cases
     ImageLoaderService imageLoaderService = new ImageLoaderService(imageLoader, imageRepository);
+    ColorProcessorService colorProcessorService = new ColorProcessorService();
 
     // Create and show the main UI
     // The UI layer depends on application services but not on infrastructure
     // directly
-    MainWindow mainWindow = new MainWindow(imageLoaderService);
+    MainWindow mainWindow = new MainWindow(imageLoaderService, colorProcessorService);
 
     // Make the window visible
     mainWindow.setVisible(true);

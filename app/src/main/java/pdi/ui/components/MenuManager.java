@@ -27,6 +27,14 @@ public class MenuManager {
   private Runnable onExit;
   private Runnable onAbout;
 
+  // Color operation callbacks
+  private Runnable onGrayscale;
+  private Runnable onBrightness;
+  private Runnable onContrast;
+  private Runnable onRedChannel;
+  private Runnable onGreenChannel;
+  private Runnable onBlueChannel;
+
   // State tracking
   private boolean hasImageLoaded = false;
 
@@ -55,6 +63,10 @@ public class MenuManager {
     // File menu
     JMenu fileMenu = createFileMenu();
     menuBar.add(fileMenu);
+
+    // Colors menu
+    JMenu colorsMenu = createColorsMenu();
+    menuBar.add(colorsMenu);
 
     // Help menu
     JMenu helpMenu = createHelpMenu();
@@ -98,6 +110,71 @@ public class MenuManager {
   }
 
   /**
+   * Creates the Colors menu with color processing operations.
+   */
+  private JMenu createColorsMenu() {
+    JMenu colorsMenu = new JMenu("Colors");
+    colorsMenu.setMnemonic('C');
+    colorsMenu.setName("colors-menu");
+
+    // Basic Operations
+    JMenuItem grayscaleItem = new JMenuItem("Grayscale");
+    grayscaleItem.setMnemonic('G');
+    grayscaleItem.setAccelerator(KeyStroke.getKeyStroke("ctrl G"));
+    grayscaleItem.addActionListener(e -> executeCallback(onGrayscale));
+    grayscaleItem.setName("grayscale-item");
+    colorsMenu.add(grayscaleItem);
+
+    colorsMenu.addSeparator();
+
+    // Adjustments
+    JMenuItem brightnessItem = new JMenuItem("Brightness...");
+    brightnessItem.setMnemonic('B');
+    brightnessItem.setAccelerator(KeyStroke.getKeyStroke("ctrl B"));
+    brightnessItem.addActionListener(e -> executeCallback(onBrightness));
+    brightnessItem.setName("brightness-item");
+    colorsMenu.add(brightnessItem);
+
+    JMenuItem contrastItem = new JMenuItem("Contrast...");
+    contrastItem.setMnemonic('n');
+    contrastItem.setAccelerator(KeyStroke.getKeyStroke("ctrl shift C"));
+    contrastItem.addActionListener(e -> executeCallback(onContrast));
+    contrastItem.setName("contrast-item");
+    colorsMenu.add(contrastItem);
+
+    colorsMenu.addSeparator();
+
+    // RGB Channel Extraction
+    JMenu rgbMenu = new JMenu("RGB Channels");
+    rgbMenu.setMnemonic('R');
+
+    JMenuItem redChannelItem = new JMenuItem("Red Channel");
+    redChannelItem.setMnemonic('R');
+    redChannelItem.setAccelerator(KeyStroke.getKeyStroke("ctrl R"));
+    redChannelItem.addActionListener(e -> executeCallback(onRedChannel));
+    redChannelItem.setName("red-channel-item");
+    rgbMenu.add(redChannelItem);
+
+    JMenuItem greenChannelItem = new JMenuItem("Green Channel");
+    greenChannelItem.setMnemonic('G');
+    greenChannelItem.setAccelerator(KeyStroke.getKeyStroke("ctrl shift G"));
+    greenChannelItem.addActionListener(e -> executeCallback(onGreenChannel));
+    greenChannelItem.setName("green-channel-item");
+    rgbMenu.add(greenChannelItem);
+
+    JMenuItem blueChannelItem = new JMenuItem("Blue Channel");
+    blueChannelItem.setMnemonic('B');
+    blueChannelItem.setAccelerator(KeyStroke.getKeyStroke("ctrl shift B"));
+    blueChannelItem.addActionListener(e -> executeCallback(onBlueChannel));
+    blueChannelItem.setName("blue-channel-item");
+    rgbMenu.add(blueChannelItem);
+
+    colorsMenu.add(rgbMenu);
+
+    return colorsMenu;
+  }
+
+  /**
    * Creates the Help menu.
    */
   private JMenu createHelpMenu() {
@@ -127,6 +204,12 @@ public class MenuManager {
     contextMenu.add(closeContextItem);
 
     contextMenu.addSeparator();
+
+    // Quick color operations
+    JMenuItem grayscaleContextItem = new JMenuItem("Grayscale");
+    grayscaleContextItem.addActionListener(e -> executeCallback(onGrayscale));
+    grayscaleContextItem.setName("context-grayscale");
+    contextMenu.add(grayscaleContextItem);
   }
 
   /**
@@ -143,6 +226,9 @@ public class MenuManager {
   private void updateMenuBarStates() {
     // Enable/disable items that require an image
     setMenuItemEnabled("close-image", hasImageLoaded);
+
+    // Enable/disable color operations
+    setMenuEnabled("colors-menu", hasImageLoaded);
   }
 
   /**
@@ -150,6 +236,7 @@ public class MenuManager {
    */
   private void updateContextMenuStates() {
     setContextMenuItemEnabled("context-close-image", hasImageLoaded);
+    setContextMenuItemEnabled("context-grayscale", hasImageLoaded);
   }
 
   /**
@@ -290,5 +377,31 @@ public class MenuManager {
 
   public void setOnAbout(Runnable callback) {
     this.onAbout = callback;
+  }
+
+  // Color operation callback setters
+
+  public void setOnGrayscale(Runnable callback) {
+    this.onGrayscale = callback;
+  }
+
+  public void setOnBrightness(Runnable callback) {
+    this.onBrightness = callback;
+  }
+
+  public void setOnContrast(Runnable callback) {
+    this.onContrast = callback;
+  }
+
+  public void setOnRedChannel(Runnable callback) {
+    this.onRedChannel = callback;
+  }
+
+  public void setOnGreenChannel(Runnable callback) {
+    this.onGreenChannel = callback;
+  }
+
+  public void setOnBlueChannel(Runnable callback) {
+    this.onBlueChannel = callback;
   }
 }

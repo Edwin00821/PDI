@@ -64,6 +64,81 @@ public class DialogManager {
   }
 
   /**
+   * Shows input dialog for brightness adjustment with validation.
+   * 
+   * @return brightness level (-255 to +255) or null if cancelled/invalid
+   */
+  public Integer showBrightnessInputDialog() {
+    String input = JOptionPane.showInputDialog(
+        parentComponent,
+        "Enter brightness level (-255 to +255):\n" +
+            "Positive values make the image brighter\n" +
+            "Negative values make the image darker",
+        "Brightness Adjustment",
+        JOptionPane.QUESTION_MESSAGE);
+
+    if (input == null) {
+      return null; // User cancelled
+    }
+
+    try {
+      int brightnessLevel = Integer.parseInt(input.trim());
+
+      // Validate range
+      if (brightnessLevel < -255 || brightnessLevel > 255) {
+        showErrorDialog("Invalid Range",
+            "Brightness level must be between -255 and +255.");
+        return null;
+      }
+
+      return brightnessLevel;
+
+    } catch (NumberFormatException e) {
+      showErrorDialog("Invalid Input",
+          "Please enter a valid integer between -255 and +255.");
+      return null;
+    }
+  }
+
+  /**
+   * Shows input dialog for contrast adjustment with validation.
+   * 
+   * @return contrast factor (0.0 to 3.0) or null if cancelled/invalid
+   */
+  public Double showContrastInputDialog() {
+    String input = JOptionPane.showInputDialog(
+        parentComponent,
+        "Enter contrast factor (0.0 to 3.0):\n" +
+            "1.0 = no change\n" +
+            "< 1.0 = decrease contrast\n" +
+            "> 1.0 = increase contrast",
+        "Contrast Adjustment",
+        JOptionPane.QUESTION_MESSAGE);
+
+    if (input == null) {
+      return null; // User cancelled
+    }
+
+    try {
+      double contrastFactor = Double.parseDouble(input.trim());
+
+      // Validate range
+      if (contrastFactor < 0.0 || contrastFactor > 3.0) {
+        showErrorDialog("Invalid Range",
+            "Contrast factor must be between 0.0 and 3.0.");
+        return null;
+      }
+
+      return contrastFactor;
+
+    } catch (NumberFormatException e) {
+      showErrorDialog("Invalid Input",
+          "Please enter a valid number between 0.0 and 3.0.");
+      return null;
+    }
+  }
+
+  /**
    * Shows a confirmation dialog for potentially destructive actions.
    * 
    * @param title   The dialog title
