@@ -1,9 +1,10 @@
 package pdi.ui.views;
 
 import javax.swing.*;
+
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.File;
 import java.util.Objects;
 
@@ -12,6 +13,7 @@ import pdi.lib.core.application.LoadImageResult;
 import pdi.lib.core.domain.Image;
 import pdi.ui.components.DialogManager;
 import pdi.ui.components.ImageCanvas;
+import pdi.ui.components.MenuManager;
 
 /**
  * Main application window for the PDI (Digital Image Processing) application.
@@ -29,7 +31,7 @@ public class MainWindow extends JFrame {
   // UI Components
   private ImageCanvas imageCanvas;
   private DialogManager dialogManager;
-  private JMenuBar menuBar;
+  private MenuManager menuManager;
   private JLabel statusLabel;
 
   // Application services
@@ -50,7 +52,7 @@ public class MainWindow extends JFrame {
     initializeWindow();
     createComponents();
     setupLayout();
-    setupMenus();
+    setupMenuCallbacks();
     setupEventHandlers();
   }
 
@@ -78,12 +80,27 @@ public class MainWindow extends JFrame {
     imageCanvas = new ImageCanvas();
     dialogManager = new DialogManager(this);
 
+    // Create menu manager
+    menuManager = new MenuManager();
+    setJMenuBar(menuManager.getMenuBar());
+
     // Create status bar
     statusLabel = new JLabel("Ready");
     statusLabel.setBorder(BorderFactory.createLoweredBevelBorder());
 
     // Initialize file chooser with image filters
     setupFileChooser();
+  }
+
+  /**
+   * Sets up callbacks for menu actions.
+   */
+  private void setupMenuCallbacks() {
+    menuManager.setOnOpenImage(this::openImage);
+    menuManager.setOnCloseImage(this::closeCurrentImage);
+    menuManager.setOnExit(this::exitApplication);
+    menuManager.setOnAbout(dialogManager::showAboutDialog);
+
   }
 
   /**
@@ -128,77 +145,6 @@ public class MainWindow extends JFrame {
   }
 
   /**
-   * Creates and sets up the menu system.
-   */
-  private void setupMenus() {
-    menuBar = new JMenuBar();
-
-    // File menu
-    JMenu fileMenu = createFileMenu();
-    menuBar.add(fileMenu);
-
-    // Help menu (placeholder for future)
-    JMenu helpMenu = createHelpMenu();
-    menuBar.add(helpMenu);
-
-    setJMenuBar(menuBar);
-  }
-
-  /**
-   * Creates the File menu with basic operations.
-   * 
-   * @return Configured File menu
-   */
-  private JMenu createFileMenu() {
-    JMenu fileMenu = new JMenu("File");
-    fileMenu.setMnemonic('F');
-
-    // Open image
-    JMenuItem openItem = new JMenuItem("Open Image...");
-    openItem.setMnemonic('O');
-    openItem.setAccelerator(KeyStroke.getKeyStroke("ctrl O"));
-    openItem.addActionListener(new OpenImageAction());
-    fileMenu.add(openItem);
-
-    fileMenu.addSeparator();
-
-    // Close image
-    JMenuItem closeItem = new JMenuItem("Close Image");
-    closeItem.setMnemonic('C');
-    closeItem.addActionListener(new CloseImageAction());
-    fileMenu.add(closeItem);
-
-    fileMenu.addSeparator();
-
-    // Exit
-    JMenuItem exitItem = new JMenuItem("Exit");
-    exitItem.setMnemonic('x');
-    exitItem.setAccelerator(KeyStroke.getKeyStroke("ctrl Q"));
-    exitItem.addActionListener(e -> System.exit(0));
-    fileMenu.add(exitItem);
-
-    return fileMenu;
-  }
-
-  /**
-   * Creates the Help menu.
-   * 
-   * @return Configured Help menu
-   */
-  private JMenu createHelpMenu() {
-    JMenu helpMenu = new JMenu("Help");
-    helpMenu.setMnemonic('H');
-
-    // About
-    JMenuItem aboutItem = new JMenuItem("About");
-    aboutItem.setMnemonic('A');
-    aboutItem.addActionListener(e -> dialogManager.showAboutDialog());
-    helpMenu.add(aboutItem);
-
-    return helpMenu;
-  }
-
-  /**
    * Sets up event handlers for the window.
    */
   private void setupEventHandlers() {
@@ -209,6 +155,42 @@ public class MainWindow extends JFrame {
         handleWindowClosing();
       }
     });
+
+    // Context menu for image canvas
+    imageCanvas.addMouseListener(new MouseAdapter() {
+      @Override
+      public void mousePressed(MouseEvent e) {
+        if (e.isPopupTrigger()) {
+          showContextMenu(e);
+        }
+      }
+
+      @Override
+      public void mouseReleased(MouseEvent e) {
+        if (e.isPopupTrigger()) {
+          showContextMenu(e);
+        }
+      }
+    });
+  }
+
+  /**
+   * Handles the open image action.
+   */
+  private void openImage() {
+    int result = fileChooser.showOpenDialog(this);
+
+    if (result == JFileChooser.APPROVE_OPTION) {
+      File selectedFile = fileChooser.getSelectedFile();
+      loadImage(selectedFile);
+    }
+  }
+
+  /**
+   * Shows the context menu at the specified location.
+   */
+  private void showContextMenu(MouseEvent e) {
+    menuManager.getContextMenu().show(e.getComponent(), e.getX(), e.getY());
   }
 
   /**
@@ -227,31 +209,6 @@ public class MainWindow extends JFrame {
    */
   private void updateStatus(String message) {
     statusLabel.setText(message);
-  }
-
-  /**
-   * Action handler for opening images.
-   */
-  private class OpenImageAction implements ActionListener {
-    @Override
-    public void actionPerformed(ActionEvent e) {
-      int result = fileChooser.showOpenDialog(MainWindow.this);
-
-      if (result == JFileChooser.APPROVE_OPTION) {
-        File selectedFile = fileChooser.getSelectedFile();
-        loadImage(selectedFile);
-      }
-    }
-  }
-
-  /**
-   * Action handler for closing the current image.
-   */
-  private class CloseImageAction implements ActionListener {
-    @Override
-    public void actionPerformed(ActionEvent e) {
-      closeCurrentImage();
-    }
   }
 
   /**
@@ -306,5 +263,12 @@ public class MainWindow extends JFrame {
    */
   public ImageCanvas getImageCanvas() {
     return imageCanvas;
+  }
+
+  /**
+   * Handles application exit.
+   */
+  private void exitApplication() {
+    handleWindowClosing();
   }
 }
