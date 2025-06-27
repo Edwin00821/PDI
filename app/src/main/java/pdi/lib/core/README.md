@@ -1,6 +1,3 @@
-Here's a detailed `README.md` for the Core module of your PDI project:
-
-```markdown
 # PDI Core Module
 
 ![Java](https://img.shields.io/badge/Java-17%2B-blue)
