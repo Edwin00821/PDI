@@ -7,14 +7,23 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.Objects;
 
-import pdi.lib.color.application.ColorProcessorService;
-import pdi.lib.core.application.ImageLoaderService;
 import pdi.lib.core.domain.Image;
+import pdi.lib.core.application.ImageLoaderService;
+
+import pdi.lib.color.application.ColorProcessorService;
+import pdi.lib.color.infrastructure.RGBExtractionOperation;
+
+import pdi.ui.commands.CommandManager;
+import pdi.ui.commands.CommandResult;
 import pdi.ui.components.DialogManager;
 import pdi.ui.components.ImageCanvas;
 import pdi.ui.components.MenuManager;
+
 import pdi.ui.controllers.ColorOperationsController;
+
 import pdi.ui.handlers.FileOperationHandler;
+import pdi.ui.handlers.ImageColorHandler;
+import pdi.ui.handlers.ImageColorHandlerCallback;
 
 /**
  * Main application window for the PDI (Digital Image Processing) application.
@@ -26,8 +35,10 @@ import pdi.ui.handlers.FileOperationHandler;
  * 
  * The window is designed to be the main entry point for user interactions
  * and coordinates between UI components and the application layer.
+ * 
+ * Now includes undo/redo functionality through the CommandManager.
  */
-public class MainWindow extends JFrame {
+public class MainWindow extends JFrame implements ImageColorHandlerCallback {
 
   // UI Components
   private ImageCanvas imageCanvas;
@@ -39,8 +50,12 @@ public class MainWindow extends JFrame {
   private final ImageLoaderService imageLoaderService;
   private final ColorProcessorService colorProcessorService;
 
+  // Command management
+  private CommandManager commandManager;
+
   // Handlers
   private FileOperationHandler fileOperationHandler;
+  private ImageColorHandler imageColorHandler;
 
   // Controllers
   private ColorOperationsController colorOperationsController;
@@ -48,7 +63,8 @@ public class MainWindow extends JFrame {
   /**
    * Creates the main application window.
    * 
-   * @param imageLoaderService Service for loading and managing images
+   * @param imageLoaderService    Service for loading and managing images
+   * @param colorProcessorService Service for color processing operations
    */
   public MainWindow(ImageLoaderService imageLoaderService, ColorProcessorService colorProcessorService) {
     this.imageLoaderService = Objects.requireNonNull(imageLoaderService,
@@ -95,12 +111,16 @@ public class MainWindow extends JFrame {
   }
 
   /**
-   * Creates and initializes handlers.
+   * Creates and initializes UI components including command manager.
    */
   private void createComponents() {
     // Create main image canvas
     imageCanvas = new ImageCanvas();
     dialogManager = new DialogManager(this);
+
+    // Create command manager for undo/redo
+    commandManager = new CommandManager(50); // Keep 50 operations in history
+    commandManager.setOnHistoryChanged(this::updateUndoRedoState);
 
     // Create menu manager
     menuManager = new MenuManager();
@@ -112,7 +132,7 @@ public class MainWindow extends JFrame {
   }
 
   /**
-   * Creates and initializes UI components.
+   * Creates and initializes handlers with command support.
    */
   private void setupHandlers() {
     // Initialize file operation handler
@@ -123,32 +143,41 @@ public class MainWindow extends JFrame {
     fileOperationHandler.setErrorCallback(this::handleError);
     fileOperationHandler.setImageClosedCallback(this::handleImageClosed);
 
-    // Initialize color operations controller
+    // Initialize image color handler with command manager
+    imageColorHandler = new ImageColorHandler(colorProcessorService, commandManager);
+    imageColorHandler.setCallback(this);
+
+    // Initialize color operations controller (keep for compatibility)
     colorOperationsController = new ColorOperationsController(dialogManager, colorProcessorService);
 
     colorOperationsController.setImageUpdateCallback(this::handleColorProcessedImage);
     colorOperationsController.setStatusUpdateCallback(this::updateStatus);
     colorOperationsController.setTitleUpdateCallback(this::setTitle);
-
   }
 
   /**
-   * Sets up callbacks for menu actions.
+   * Sets up callbacks for menu actions including undo/redo.
    */
   private void setupMenuCallbacks() {
+    // File operations
     menuManager.setOnOpenImage(fileOperationHandler::openImage);
-    menuManager.setOnCloseImage(fileOperationHandler::closeCurrentImage);
+    menuManager.setOnCloseImage(this::handleCloseImageWithHistoryReset);
 
+    // Undo/Redo operations
+    menuManager.setOnUndo(this::performUndo);
+    menuManager.setOnRedo(this::performRedo);
+
+    // Dialog operations
     menuManager.setOnAbout(dialogManager::showAboutDialog);
     menuManager.setOnExit(this::exitApplication);
 
-    menuManager.setOnGrayscale(() -> applyColorOperation("grayscale"));
-    menuManager.setOnBrightness(() -> applyColorOperation("brightness"));
-    menuManager.setOnContrast(() -> applyColorOperation("contrast"));
-    menuManager.setOnRedChannel(() -> applyColorOperation("rgb_red"));
-    menuManager.setOnGreenChannel(() -> applyColorOperation("rgb_green"));
-    menuManager.setOnBlueChannel(() -> applyColorOperation("rgb_blue"));
-
+    // Color operations - now using ImageColorHandler with command support
+    menuManager.setOnGrayscale(() -> applyColorOperationWithCommands("grayscale"));
+    menuManager.setOnBrightness(() -> applyColorOperationWithCommands("brightness"));
+    menuManager.setOnContrast(() -> applyColorOperationWithCommands("contrast"));
+    menuManager.setOnRedChannel(() -> applyColorOperationWithCommands("rgb_red"));
+    menuManager.setOnGreenChannel(() -> applyColorOperationWithCommands("rgb_green"));
+    menuManager.setOnBlueChannel(() -> applyColorOperationWithCommands("rgb_blue"));
   }
 
   /**
@@ -181,6 +210,159 @@ public class MainWindow extends JFrame {
     });
   }
 
+  /**
+   * Handles close image operation with command history reset.
+   */
+  private void handleCloseImageWithHistoryReset() {
+    fileOperationHandler.closeCurrentImage();
+    commandManager.clearHistory(); // Clear history when closing image
+    updateUndoRedoState(); // Update menu states
+  }
+
+  /**
+   * Performs undo operation.
+   */
+  private void performUndo() {
+    if (!commandManager.canUndo()) {
+      updateStatus("Nothing to undo");
+      return;
+    }
+
+    try {
+      updateStatus("Undoing " + commandManager.getUndoDescription() + "...");
+
+      CommandResult result = commandManager.undo();
+
+      if (result.isSuccess()) {
+        imageCanvas.setImage(result.getResultImage());
+        updateStatus("Undone: " + commandManager.getRedoDescription());
+      } else {
+        updateStatus("Undo failed: " + result.getErrorMessage());
+        dialogManager.showErrorDialog("Undo Failed", result.getErrorMessage());
+      }
+
+    } catch (Exception e) {
+      String errorMsg = "Failed to undo operation: " + e.getMessage();
+      updateStatus(errorMsg);
+      dialogManager.showErrorDialog("Undo Error", errorMsg);
+      e.printStackTrace();
+    }
+  }
+
+  /**
+   * Performs redo operation.
+   */
+  private void performRedo() {
+    if (!commandManager.canRedo()) {
+      updateStatus("Nothing to redo");
+      return;
+    }
+
+    try {
+      updateStatus("Redoing " + commandManager.getRedoDescription() + "...");
+
+      CommandResult result = commandManager.redo();
+
+      if (result.isSuccess()) {
+        imageCanvas.setImage(result.getResultImage());
+        updateStatus("Redone: " + commandManager.getUndoDescription());
+      } else {
+        updateStatus("Redo failed: " + result.getErrorMessage());
+        dialogManager.showErrorDialog("Redo Failed", result.getErrorMessage());
+      }
+
+    } catch (Exception e) {
+      String errorMsg = "Failed to redo operation: " + e.getMessage();
+      updateStatus(errorMsg);
+      dialogManager.showErrorDialog("Redo Error", errorMsg);
+      e.printStackTrace();
+    }
+  }
+
+  /**
+   * Updates the undo/redo menu states based on command manager state.
+   */
+  private void updateUndoRedoState() {
+    boolean canUndo = commandManager.canUndo();
+    boolean canRedo = commandManager.canRedo();
+
+    menuManager.setUndoRedoState(canUndo, canRedo);
+    menuManager.setUndoDescription(commandManager.getUndoDescription());
+    menuManager.setRedoDescription(commandManager.getRedoDescription());
+  }
+
+  /**
+   * Applies color operations using the command pattern for undo/redo support.
+   * 
+   * @param operationType Type of operation to apply
+   */
+  private void applyColorOperationWithCommands(String operationType) {
+    Image currentImage = getCurrentImage();
+    if (currentImage == null) {
+      updateStatus("No image loaded");
+      return;
+    }
+
+    switch (operationType) {
+      case "grayscale":
+        imageColorHandler.applyGrayscale(currentImage);
+        break;
+      case "brightness":
+        // Show brightness dialog and apply
+        colorOperationsController.applyColorOperation(currentImage, operationType);
+        break;
+      case "contrast":
+        // Show contrast dialog and apply
+        colorOperationsController.applyColorOperation(currentImage, operationType);
+        break;
+      case "rgb_red":
+        imageColorHandler.applyRGBExtraction(currentImage, RGBExtractionOperation.Channel.RED);
+        break;
+      case "rgb_green":
+        imageColorHandler.applyRGBExtraction(currentImage, RGBExtractionOperation.Channel.GREEN);
+        break;
+      case "rgb_blue":
+        imageColorHandler.applyRGBExtraction(currentImage, RGBExtractionOperation.Channel.BLUE);
+        break;
+      default:
+        updateStatus("Unknown operation: " + operationType);
+    }
+  }
+
+  // ImageColorHandlerCallback implementation
+
+  @Override
+  public void onProcessingStarted(String operationName) {
+    updateStatus("Processing: " + operationName + "...");
+  }
+
+  @Override
+  public void onProcessingCompleted(Image processedImage, String operationName, long processingTime) {
+    imageCanvas.setImage(processedImage);
+    updateStatus(operationName + " completed in " + processingTime + "ms");
+
+    // Update title with operation indicator
+    String currentTitle = getTitle();
+    if (!currentTitle.contains("*")) {
+      setTitle(currentTitle + " *");
+    }
+  }
+
+  @Override
+  public void onProcessingFailed(String operationName, String errorMessage) {
+    updateStatus(operationName + " failed: " + errorMessage);
+    dialogManager.showErrorDialog(operationName + " Failed", errorMessage);
+  }
+
+  @Override
+  public void onInvalidParameters(String operationName, String errorMessage) {
+    updateStatus(operationName + " - Invalid parameters: " + errorMessage);
+    dialogManager.showErrorDialog("Invalid Parameters",
+        operationName + " failed due to invalid parameters:\n" + errorMessage);
+  }
+
+  // Existing methods (unchanged)
+
   private void handleError(String errorMessage) {
     dialogManager.showErrorDialog("Error", errorMessage);
   }
@@ -190,6 +372,10 @@ public class MainWindow extends JFrame {
     setTitle("PDI - " + image.getOriginalFileName());
 
     menuManager.setImageLoaded(true);
+
+    // Clear command history when loading a new image
+    commandManager.clearHistory();
+    updateUndoRedoState();
   }
 
   private void handleImageClosed() {
@@ -197,27 +383,20 @@ public class MainWindow extends JFrame {
     setTitle("PDI - Digital Image Processing");
 
     menuManager.setImageLoaded(false);
+
+    // Clear command history when closing image
+    commandManager.clearHistory();
+    updateUndoRedoState();
   }
 
   /**
-   * Handles color-processed image updates.
+   * Handles color-processed image updates from the old controller.
+   * This maintains backward compatibility.
    * 
    * @param processedImage The processed image to display
    */
   private void handleColorProcessedImage(Image processedImage) {
     imageCanvas.setImage(processedImage);
-  }
-
-  /**
-   * Applies a color operation to the currently loaded image.
-   * 
-   * @param operationType Type of operation to apply
-   */
-  private void applyColorOperation(String operationType) {
-    Image currentImage = getCurrentImage();
-    if (currentImage != null) {
-      colorOperationsController.applyColorOperation(currentImage, operationType);
-    }
   }
 
   /**
@@ -240,8 +419,8 @@ public class MainWindow extends JFrame {
    * Handles window closing event - cleanup if needed.
    */
   private void handleWindowClosing() {
-    // In the future, we might want to ask about saving unsaved work
-    // For now, just clean exit
+    // Clear command history before exit
+    commandManager.clearHistory();
     System.exit(0);
   }
 
@@ -261,6 +440,15 @@ public class MainWindow extends JFrame {
    */
   public ImageCanvas getImageCanvas() {
     return imageCanvas;
+  }
+
+  /**
+   * Gets the command manager for external access if needed.
+   * 
+   * @return The command manager
+   */
+  public CommandManager getCommandManager() {
+    return commandManager;
   }
 
   /**
