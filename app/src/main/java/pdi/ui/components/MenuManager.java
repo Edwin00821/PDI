@@ -21,6 +21,10 @@ public class MenuManager {
   private JMenuBar menuBar;
   private JPopupMenu contextMenu;
 
+  // Undo/Redo callbacks
+  private Runnable onUndo;
+  private Runnable onRedo;
+
   // Action callbacks - using functional interfaces for clean separation
   private Runnable onOpenImage;
   private Runnable onCloseImage;
@@ -37,6 +41,10 @@ public class MenuManager {
 
   // State tracking
   private boolean hasImageLoaded = false;
+
+  // State tracking for undo/redo
+  private boolean canUndo = false;
+  private boolean canRedo = false;
 
   /**
    * Creates a new MenuManager with default configuration.
@@ -74,7 +82,8 @@ public class MenuManager {
   }
 
   /**
-   * Creates the File menu with basic operations.
+   * Updates the File menu to include undo/redo operations.
+   * Replace the existing createFileMenu method with this version.
    */
   private JMenu createFileMenu() {
     JMenu fileMenu = new JMenu("File");
@@ -94,8 +103,26 @@ public class MenuManager {
     closeItem.setMnemonic('C');
     closeItem.setAccelerator(KeyStroke.getKeyStroke("ctrl W"));
     closeItem.addActionListener(e -> executeCallback(onCloseImage));
-    closeItem.setName("close-image"); // For state management
+    closeItem.setName("close-image");
     fileMenu.add(closeItem);
+
+    fileMenu.addSeparator();
+
+    // Undo
+    JMenuItem undoItem = new JMenuItem("Undo");
+    undoItem.setMnemonic('U');
+    undoItem.setAccelerator(KeyStroke.getKeyStroke("ctrl Z"));
+    undoItem.addActionListener(e -> executeCallback(onUndo));
+    undoItem.setName("undo-item");
+    fileMenu.add(undoItem);
+
+    // Redo
+    JMenuItem redoItem = new JMenuItem("Redo");
+    redoItem.setMnemonic('R');
+    redoItem.setAccelerator(KeyStroke.getKeyStroke("ctrl Y"));
+    redoItem.addActionListener(e -> executeCallback(onRedo));
+    redoItem.setName("redo-item");
+    fileMenu.add(redoItem);
 
     fileMenu.addSeparator();
 
@@ -107,6 +134,42 @@ public class MenuManager {
     fileMenu.add(exitItem);
 
     return fileMenu;
+  }
+
+  /**
+   * Updates the context menu to include undo/redo operations.
+   * Replace the existing createContextMenu method with this version.
+   */
+  private void createContextMenu() {
+    contextMenu = new JPopupMenu();
+
+    // Undo
+    JMenuItem undoContextItem = new JMenuItem("Undo");
+    undoContextItem.addActionListener(e -> executeCallback(onUndo));
+    undoContextItem.setName("context-undo");
+    contextMenu.add(undoContextItem);
+
+    // Redo
+    JMenuItem redoContextItem = new JMenuItem("Redo");
+    redoContextItem.addActionListener(e -> executeCallback(onRedo));
+    redoContextItem.setName("context-redo");
+    contextMenu.add(redoContextItem);
+
+    contextMenu.addSeparator();
+
+    // Close image (if available)
+    JMenuItem closeContextItem = new JMenuItem("Close Image");
+    closeContextItem.addActionListener(e -> executeCallback(onCloseImage));
+    closeContextItem.setName("context-close-image");
+    contextMenu.add(closeContextItem);
+
+    contextMenu.addSeparator();
+
+    // Quick color operations
+    JMenuItem grayscaleContextItem = new JMenuItem("Grayscale");
+    grayscaleContextItem.addActionListener(e -> executeCallback(onGrayscale));
+    grayscaleContextItem.setName("context-grayscale");
+    contextMenu.add(grayscaleContextItem);
   }
 
   /**
@@ -192,27 +255,6 @@ public class MenuManager {
   }
 
   /**
-   * Creates the context menu for right-click operations.
-   */
-  private void createContextMenu() {
-    contextMenu = new JPopupMenu();
-
-    // Close image (if available)
-    JMenuItem closeContextItem = new JMenuItem("Close Image");
-    closeContextItem.addActionListener(e -> executeCallback(onCloseImage));
-    closeContextItem.setName("context-close-image");
-    contextMenu.add(closeContextItem);
-
-    contextMenu.addSeparator();
-
-    // Quick color operations
-    JMenuItem grayscaleContextItem = new JMenuItem("Grayscale");
-    grayscaleContextItem.addActionListener(e -> executeCallback(onGrayscale));
-    grayscaleContextItem.setName("context-grayscale");
-    contextMenu.add(grayscaleContextItem);
-  }
-
-  /**
    * Updates menu item states based on current application state.
    */
   private void updateMenuStates() {
@@ -221,7 +263,8 @@ public class MenuManager {
   }
 
   /**
-   * Updates menu bar item states.
+   * Updates menu bar item states including undo/redo.
+   * Replace the existing updateMenuBarStates method with this version.
    */
   private void updateMenuBarStates() {
     // Enable/disable items that require an image
@@ -229,14 +272,106 @@ public class MenuManager {
 
     // Enable/disable color operations
     setMenuEnabled("colors-menu", hasImageLoaded);
+
+    // Enable/disable undo/redo
+    setMenuItemEnabled("undo-item", canUndo);
+    setMenuItemEnabled("redo-item", canRedo);
   }
 
   /**
-   * Updates context menu item states.
+   * Updates context menu item states including undo/redo.
+   * Replace the existing updateContextMenuStates method with this version.
    */
   private void updateContextMenuStates() {
     setContextMenuItemEnabled("context-close-image", hasImageLoaded);
     setContextMenuItemEnabled("context-grayscale", hasImageLoaded);
+    setContextMenuItemEnabled("context-undo", canUndo);
+    setContextMenuItemEnabled("context-redo", canRedo);
+  }
+
+  /**
+   * Updates the undo/redo state and refreshes menu states.
+   * 
+   * @param canUndo true if undo is possible
+   * @param canRedo true if redo is possible
+   */
+  public void setUndoRedoState(boolean canUndo, boolean canRedo) {
+    this.canUndo = canUndo;
+    this.canRedo = canRedo;
+    updateMenuStates();
+  }
+
+  /**
+   * Updates the undo menu item text with operation description.
+   * 
+   * @param description Description of the operation that can be undone,
+   *                    or null to use default text
+   */
+  public void setUndoDescription(String description) {
+    String text = (description != null) ? "Undo " + description : "Undo";
+    updateMenuItemText("undo-item", text);
+    updateContextMenuItemText("context-undo", text);
+  }
+
+  /**
+   * Updates the redo menu item text with operation description.
+   * 
+   * @param description Description of the operation that can be redone,
+   *                    or null to use default text
+   */
+  public void setRedoDescription(String description) {
+    String text = (description != null) ? "Redo " + description : "Redo";
+    updateMenuItemText("redo-item", text);
+    updateContextMenuItemText("context-redo", text);
+  }
+
+  /**
+   * Updates the text of a menu item by name.
+   * 
+   * @param itemName Name of the menu item
+   * @param text     New text for the menu item
+   */
+  private void updateMenuItemText(String itemName, String text) {
+    JMenuItem item = findMenuItemByName(menuBar, itemName);
+    if (item != null) {
+      item.setText(text);
+    }
+  }
+
+  /**
+   * Updates the text of a context menu item by name.
+   * 
+   * @param itemName Name of the context menu item
+   * @param text     New text for the menu item
+   */
+  private void updateContextMenuItemText(String itemName, String text) {
+    for (int i = 0; i < contextMenu.getComponentCount(); i++) {
+      var component = contextMenu.getComponent(i);
+      if (component instanceof JMenuItem item && itemName.equals(item.getName())) {
+        item.setText(text);
+        break;
+      }
+    }
+  }
+
+  // Add these callback setters to MenuManager class
+
+  /**
+   * Sets the callback for undo operations.
+   * 
+   * @param callback Callback to execute when undo is requested
+   */
+  public void setOnUndo(Runnable callback) {
+    this.onUndo = callback;
+  }
+
+  /**
+   * Sets the callback for redo operations.
+   * 
+   * @param callback Callback to execute when redo is requested
+   */
+  public void setOnRedo(Runnable callback) {
+    this.onRedo = callback;
   }
 
   /**

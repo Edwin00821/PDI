@@ -5,7 +5,12 @@ import java.util.Map;
 import java.util.Objects;
 
 import pdi.lib.core.domain.Image;
+import pdi.ui.commands.ColorCommand;
+import pdi.ui.commands.Command;
+import pdi.ui.commands.CommandManager;
+import pdi.ui.commands.CommandResult;
 import pdi.lib.color.application.ColorProcessorService;
+import pdi.lib.color.domain.ColorOperation;
 import pdi.lib.color.domain.ColorOperationResult;
 import pdi.lib.color.infrastructure.BrightnessOperation;
 import pdi.lib.color.infrastructure.ContrastOperation;
@@ -21,6 +26,8 @@ import pdi.lib.color.infrastructure.RGBExtractionOperation;
  */
 public class ImageColorHandler {
 
+  private CommandManager commandManager;
+
   private final ColorProcessorService colorProcessorService;
   private ImageColorHandlerCallback callback;
 
@@ -35,6 +42,29 @@ public class ImageColorHandler {
   }
 
   /**
+   * Creates a new ImageColorHandler with command manager for undo/redo support.
+   * 
+   * @param colorProcessorService Service for performing color operations
+   * @param commandManager        Manager for handling command history
+   */
+  public ImageColorHandler(ColorProcessorService colorProcessorService,
+      CommandManager commandManager) {
+    this.colorProcessorService = Objects.requireNonNull(colorProcessorService,
+        "ColorProcessorService cannot be null");
+    this.commandManager = Objects.requireNonNull(commandManager,
+        "CommandManager cannot be null");
+  }
+
+  /**
+   * Sets the command manager for undo/redo functionality.
+   * 
+   * @param commandManager Command manager to use
+   */
+  public void setCommandManager(CommandManager commandManager) {
+    this.commandManager = commandManager;
+  }
+
+  /**
    * Sets the callback for receiving processing events.
    * 
    * @param callback Callback to receive processing events
@@ -44,7 +74,7 @@ public class ImageColorHandler {
   }
 
   /**
-   * Applies grayscale conversion to the specified image.
+   * Applies grayscale conversion to the specified image using command pattern.
    * 
    * @param image Image to process
    */
@@ -54,15 +84,22 @@ public class ImageColorHandler {
       return;
     }
 
-    processColorOperation("Grayscale Conversion", () -> {
-      GrayscaleOperation grayscaleOperation = new GrayscaleOperation();
-      Map<String, Object> parameters = new HashMap<>();
-      return colorProcessorService.processImage(image, grayscaleOperation, parameters);
-    });
+    if (commandManager != null) {
+      // Use command pattern for undo/redo support
+      executeColorCommand(image, new GrayscaleOperation(), new HashMap<>(), "Grayscale Conversion");
+    } else {
+      // Fallback to direct processing (backward compatibility)
+      processColorOperation("Grayscale Conversion", () -> {
+        GrayscaleOperation grayscaleOperation = new GrayscaleOperation();
+        Map<String, Object> parameters = new HashMap<>();
+        return colorProcessorService.processImage(image, grayscaleOperation, parameters);
+      });
+    }
   }
 
+  // Replace the existing applyBrightness method with this version
   /**
-   * Applies brightness adjustment to the specified image.
+   * Applies brightness adjustment to the specified image using command pattern.
    * 
    * @param image           Image to process
    * @param brightnessLevel Brightness level (-255 to +255)
@@ -73,15 +110,24 @@ public class ImageColorHandler {
       return;
     }
 
-    processColorOperation("Brightness Adjustment", () -> {
-      BrightnessOperation brightnessOperation = new BrightnessOperation();
+    if (commandManager != null) {
+      // Use command pattern for undo/redo support
       Map<String, Object> parameters = BrightnessOperation.createParameters(brightnessLevel);
-      return colorProcessorService.processImage(image, brightnessOperation, parameters);
-    });
+      executeColorCommand(image, new BrightnessOperation(), parameters,
+          "Brightness Adjustment (" + brightnessLevel + ")");
+    } else {
+      // Fallback to direct processing (backward compatibility)
+      processColorOperation("Brightness Adjustment", () -> {
+        BrightnessOperation brightnessOperation = new BrightnessOperation();
+        Map<String, Object> parameters = BrightnessOperation.createParameters(brightnessLevel);
+        return colorProcessorService.processImage(image, brightnessOperation, parameters);
+      });
+    }
   }
 
+  // Replace the existing applyContrast method with this version
   /**
-   * Applies contrast adjustment to the specified image.
+   * Applies contrast adjustment to the specified image using command pattern.
    * 
    * @param image          Image to process
    * @param contrastFactor Contrast factor (0.0 to 3.0)
@@ -92,15 +138,24 @@ public class ImageColorHandler {
       return;
     }
 
-    processColorOperation("Contrast Adjustment", () -> {
-      ContrastOperation contrastOperation = new ContrastOperation();
+    if (commandManager != null) {
+      // Use command pattern for undo/redo support
       Map<String, Object> parameters = ContrastOperation.createParameters(contrastFactor);
-      return colorProcessorService.processImage(image, contrastOperation, parameters);
-    });
+      executeColorCommand(image, new ContrastOperation(), parameters,
+          "Contrast Adjustment (" + contrastFactor + ")");
+    } else {
+      // Fallback to direct processing (backward compatibility)
+      processColorOperation("Contrast Adjustment", () -> {
+        ContrastOperation contrastOperation = new ContrastOperation();
+        Map<String, Object> parameters = ContrastOperation.createParameters(contrastFactor);
+        return colorProcessorService.processImage(image, contrastOperation, parameters);
+      });
+    }
   }
 
+  // Replace the existing applyRGBExtraction method with this version
   /**
-   * Applies RGB channel extraction to the specified image.
+   * Applies RGB channel extraction to the specified image using command pattern.
    * 
    * @param image   Image to process
    * @param channel RGB channel to extract
@@ -117,11 +172,55 @@ public class ImageColorHandler {
     }
 
     String operationName = channel.name() + " Channel Extraction";
-    processColorOperation(operationName, () -> {
-      RGBExtractionOperation rgbOperation = new RGBExtractionOperation();
+
+    if (commandManager != null) {
+      // Use command pattern for undo/redo support
       Map<String, Object> parameters = RGBExtractionOperation.createParameters(channel);
-      return colorProcessorService.processImage(image, rgbOperation, parameters);
-    });
+      executeColorCommand(image, new RGBExtractionOperation(), parameters, operationName);
+    } else {
+      // Fallback to direct processing (backward compatibility)
+      processColorOperation(operationName, () -> {
+        RGBExtractionOperation rgbOperation = new RGBExtractionOperation();
+        Map<String, Object> parameters = RGBExtractionOperation.createParameters(channel);
+        return colorProcessorService.processImage(image, rgbOperation, parameters);
+      });
+    }
+  }
+
+  /**
+   * Executes a color operation as a command for undo/redo support.
+   * 
+   * @param image       Image to process
+   * @param operation   Color operation to apply
+   * @param parameters  Operation parameters
+   * @param description Human-readable description
+   */
+  private void executeColorCommand(Image image, ColorOperation operation,
+      Map<String, Object> parameters, String description) {
+
+    notifyProcessingStarted(description);
+
+    try {
+      // Create and execute command
+      Command command = new ColorCommand(image, operation, parameters,
+          colorProcessorService, description);
+
+      CommandResult result = commandManager.executeCommand(command);
+
+      if (result.isSuccess()) {
+        notifyProcessingCompleted(result.getResultImage(), description,
+            result.getExecutionTimeMs());
+      } else {
+        notifyProcessingFailed(description, result.getErrorMessage());
+      }
+
+    } catch (IllegalArgumentException ex) {
+      notifyInvalidParameters(description, ex.getMessage());
+    } catch (Exception ex) {
+      String message = ex.getClass().getSimpleName() + " - " + ex.getMessage();
+      notifyProcessingFailed(description, message);
+      ex.printStackTrace();
+    }
   }
 
   /**
